@@ -1,19 +1,33 @@
 @import "tailwindcss";
 
-/* Fix html5-qrcode camera video to fit container perfectly */
+/* Fix html5-qrcode camera video to fit container perfectly on all browsers including Safari */
 #reader {
   position: relative !important;
   border: none !important;
+  background-color: #0f172a !important; /* Dark slate background to eliminate white gaps */
+  width: 100% !important;
+  overflow: hidden !important;
+  border-radius: 1.5rem !important;
 }
 
 #reader video {
   width: 100% !important;
   height: 100% !important;
+  max-height: 380px !important;
   object-fit: cover !important;
-  border-radius: 1.5rem !important; /* matches rounded-3xl */
+  border-radius: 1.5rem !important;
+  display: block !important;
+  background-color: #0f172a !important;
 }
 
-/* Hide any html5-qrcode generated standard titles or help texts inside the container */
-#reader > div:first-child {
+/* Hide internal processing canvas and dashboard headers without hiding the video wrapper */
+#reader canvas {
+  display: none !important;
+}
+
+#reader__dashboard_section,
+#reader__dashboard_section_csr,
+#reader__status_span,
+#reader__header_message {
   display: none !important;
 }

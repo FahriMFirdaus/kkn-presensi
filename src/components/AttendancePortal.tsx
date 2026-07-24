@@ -136,7 +136,7 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
         }
       };
 
-      const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+      const config = { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 };
 
       // Multi-tier robust camera start routine
       let started = false;
@@ -428,8 +428,8 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
 
             <div className="my-4 space-y-4 flex flex-col items-center justify-center flex-grow">
               {/* QR Reader Box */}
-              <div className="w-full max-w-sm rounded-3xl border border-slate-200 shadow-inner bg-slate-50 relative min-h-[280px] flex flex-col items-center justify-center overflow-hidden">
-                <div id="reader" className="w-full h-full min-h-[280px]"></div>
+              <div className="w-full max-w-sm rounded-3xl border border-slate-800 shadow-inner bg-slate-900 relative min-h-[280px] flex flex-col items-center justify-center overflow-hidden">
+                <div id="reader" className="w-full h-full min-h-[280px] bg-slate-900"></div>
                 
                 {/* Trigger Button if Camera is Not Active Yet or Permission User Gesture Required */}
                 {!cameraActive && (
