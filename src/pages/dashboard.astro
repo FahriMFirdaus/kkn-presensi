@@ -107,7 +107,7 @@ const formatIndonesianDate = (dateStr: string) => {
     </div>
 
     <!-- Main Attendance Actions (React) -->
-    <AttendancePortal client:load userId={profile.id} initialTodayAttendance={todayAttendance} />
+    <AttendancePortal client:only="react" userId={profile.id} initialTodayAttendance={todayAttendance} />
 
     <!-- Attendance History -->
     <div class="pt-8 space-y-3">

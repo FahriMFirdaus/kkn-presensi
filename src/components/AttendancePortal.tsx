@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Camera, FileText, Frown, CheckCircle, ArrowLeft, Upload, AlertCircle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface Props {
   userId: string;
@@ -10,7 +11,6 @@ interface Props {
 
 export default function AttendancePortal({ userId, initialTodayAttendance }: Props) {
   const [mode, setMode] = useState<'home' | 'hadir' | 'sakit' | 'izin'>('home');
-  const [Html5QrcodeLib, setHtml5QrcodeLib] = useState<any>(null);
   const [reason, setReason] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -18,13 +18,6 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
   const [todayAttendance, setTodayAttendance] = useState<any>(initialTodayAttendance);
   
   const scannerRef = useRef<any>(null);
-
-  // Pre-load the camera library immediately when the page mounts in the browser
-  useEffect(() => {
-    import('html5-qrcode').then(({ Html5Qrcode }) => {
-      setHtml5QrcodeLib(() => Html5Qrcode);
-    }).catch(err => console.error("Error pre-loading camera library:", err));
-  }, []);
 
   // Clear messages when mode changes
   useEffect(() => {
@@ -44,12 +37,12 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
     }
   }, [mode]);
 
-  // QR Code Scanner initialization
+  // QR Code Scanner initialization (using static Html5Qrcode import directly)
   useEffect(() => {
     let html5QrCode: any = null;
     let timeoutId: any = null;
 
-    if (mode === 'hadir' && Html5QrcodeLib) {
+    if (mode === 'hadir') {
       // Delay camera initialization by 150ms to ensure React finishes DOM painting
       timeoutId = setTimeout(() => {
         const element = document.getElementById("reader");
@@ -58,7 +51,7 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
           return;
         }
 
-        html5QrCode = new Html5QrcodeLib("reader");
+        html5QrCode = new Html5Qrcode("reader");
         scannerRef.current = html5QrCode;
 
         const qrCodeSuccessCallback = async (decodedText: string) => {
@@ -101,7 +94,7 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
         const config = { fps: 10, qrbox: { width: 250, height: 250 } };
         
         // Smart camera selection: default to back camera, fallback to first available
-        Html5QrcodeLib.getCameras().then((devices: any[]) => {
+        Html5Qrcode.getCameras().then((devices: any[]) => {
           if (devices && devices.length > 0) {
             const backCamera = devices.find((device: any) => 
               device.label.toLowerCase().includes('back') || 
@@ -141,7 +134,7 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
         scannerRef.current.stop().catch((err: any) => console.error(err));
       }
     };
-  }, [mode, Html5QrcodeLib]);
+  }, [mode]);
 
   const handleExcuseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
