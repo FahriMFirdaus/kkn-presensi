@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { Camera, FileText, Frown, CheckCircle, ArrowLeft, Upload, AlertCircle, Loader2 } from 'lucide-react';
+import { Camera, FileText, Frown, CheckCircle, ArrowLeft, Upload, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import * as Html5QrcodeModule from 'html5-qrcode';
-
-// Resolve CommonJS named export safely for Vite/Astro production bundles
-const Html5Qrcode = Html5QrcodeModule.Html5Qrcode;
 
 interface Props {
   userId: string;
@@ -17,16 +13,20 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
   const [reason, setReason] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [startingCamera, setStartingCamera] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [todayAttendance, setTodayAttendance] = useState<any>(initialTodayAttendance);
   
   const scannerRef = useRef<any>(null);
 
-  // Clear messages when mode changes
+  // Clear state when mode changes
   useEffect(() => {
     setMessage(null);
     setReason('');
     setFile(null);
+    setCameraActive(false);
+    setStartingCamera(false);
     
     // Stop scanner if leaving "hadir" mode
     if (mode !== 'hadir' && scannerRef.current) {
@@ -37,113 +37,194 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
       } catch (e) {
         console.error(e);
       }
+      scannerRef.current = null;
     }
   }, [mode]);
 
-  // QR Code Scanner initialization
-  useEffect(() => {
-    let html5QrCode: any = null;
-    let timeoutId: any = null;
+  // Function to initialize and start QR Code Scanner
+  const initAndStartScanner = async () => {
+    if (startingCamera) return;
+    setStartingCamera(true);
+    setMessage(null);
 
-    if (mode === 'hadir' && Html5Qrcode) {
-      // Delay camera initialization by 150ms to ensure React finishes DOM painting
-      timeoutId = setTimeout(() => {
-        const element = document.getElementById("reader");
-        if (!element) {
-          console.warn("Reader element still not found in DOM.");
-          return;
+    // 1. Check browser security context & getUserMedia support
+    if (typeof window !== 'undefined' && !window.isSecureContext && window.location.hostname !== 'localhost') {
+      setMessage({
+        type: 'error',
+        text: 'Akses kamera membutuhkan koneksi HTTPS aman. Pastikan Anda membuka website via HTTPS.'
+      });
+      setStartingCamera(false);
+      return;
+    }
+
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setMessage({
+        type: 'error',
+        text: 'Browser Anda tidak mendukung perizinan kamera (navigator.mediaDevices.getUserMedia tidak tersedia).'
+      });
+      setStartingCamera(false);
+      return;
+    }
+
+    try {
+      // Dynamically import html5-qrcode for 100% bundle compatibility
+      const Html5QrcodeModule = await import('html5-qrcode');
+      const Html5QrcodeClass = 
+        Html5QrcodeModule.Html5Qrcode || 
+        (Html5QrcodeModule as any).default?.Html5Qrcode || 
+        (Html5QrcodeModule as any).default || 
+        Html5QrcodeModule;
+
+      if (!Html5QrcodeClass) {
+        throw new Error("Pustaka Html5Qrcode gagal dimuat");
+      }
+
+      // Ensure DOM element is present
+      const element = document.getElementById("reader");
+      if (!element) {
+        throw new Error("Elemen pemindai #reader tidak ditemukan di layar");
+      }
+
+      // Stop any existing instance
+      if (scannerRef.current) {
+        try {
+          if (scannerRef.current.isScanning) {
+            await scannerRef.current.stop();
+          }
+        } catch (stopErr) {
+          console.warn("Error stopping previous scanner instance:", stopErr);
+        }
+        scannerRef.current = null;
+      }
+
+      const html5QrCode = new Html5QrcodeClass("reader");
+      scannerRef.current = html5QrCode;
+
+      const qrCodeSuccessCallback = async (decodedText: string) => {
+        setLoading(true);
+        try {
+          if (html5QrCode.isScanning) {
+            await html5QrCode.stop();
+          }
+        } catch (err) {
+          console.error("Failed stopping scanner on success", err);
         }
 
         try {
-          html5QrCode = new Html5Qrcode("reader");
-          scannerRef.current = html5QrCode;
-        } catch (e: any) {
-          console.error("Failed to instantiate Html5Qrcode:", e);
-          setMessage({ type: 'error', text: `Inisialisasi pemindai gagal: ${e.message || e}` });
-          return;
-        }
+          const response = await fetch('/api/attend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: decodedText }),
+          });
 
-        const qrCodeSuccessCallback = async (decodedText: string) => {
-          // Stop scanner once scanned successfully
-          setLoading(true);
-          try {
-            await html5QrCode.stop();
-          } catch (err) {
-            console.error("Failed to stop scanner", err);
-          }
-
-          try {
-            // Submit attendance
-            const response = await fetch('/api/attend', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ token: decodedText }),
+          const result = await response.json();
+          if (response.ok) {
+            setMessage({ type: 'success', text: result.message || 'Presensi Hadir berhasil dicatat!' });
+            setTodayAttendance({
+              status: 'hadir',
+              approval_status: 'approved',
+              created_at: new Date().toISOString()
             });
-
-            const result = await response.json();
-            if (response.ok) {
-              setMessage({ type: 'success', text: result.message || 'Presensi Hadir berhasil dicatat!' });
-              // Set today attendance state so it locks user dashboard
-              setTodayAttendance({
-                status: 'hadir',
-                approval_status: 'approved',
-                created_at: new Date().toISOString()
-              });
-              setMode('home');
-            } else {
-              setMessage({ type: 'error', text: result.error || 'Gagal melakukan presensi' });
-            }
-          } catch (err) {
-            setMessage({ type: 'error', text: 'Terjadi kesalahan jaringan' });
-          } finally {
-            setLoading(false);
+            setMode('home');
+          } else {
+            setMessage({ type: 'error', text: result.error || 'Gagal melakukan presensi' });
           }
-        };
+        } catch (err) {
+          setMessage({ type: 'error', text: 'Terjadi kesalahan jaringan' });
+        } finally {
+          setLoading(false);
+        }
+      };
 
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-        
-        // Highly simplified and robust camera start routine
-        const startScanner = async () => {
-          try {
-            // Start scanning immediately with rear camera preference (environment)
-            // This natively triggers permission popups reliably on all browsers (including Safari and Chrome)
-            await html5QrCode.start(
-              { facingMode: "environment" }, 
-              config, 
-              qrCodeSuccessCallback, 
-              () => {} // silent scan errors
-            );
-          } catch (err: any) {
-            console.warn("Failed starting camera with environment constraint, trying user camera...", err);
-            try {
-              // Fallback to front camera (user) if back camera setup fails
-              await html5QrCode.start(
-                { facingMode: "user" }, 
-                config, 
-                qrCodeSuccessCallback, 
-                () => {}
-              );
-            } catch (fallbackErr: any) {
-              console.error("All camera start attempts failed:", fallbackErr);
-              setMessage({
-                type: 'error',
-                text: `Kamera tidak dapat dimuat: ${fallbackErr.message || fallbackErr}. Silakan periksa perizinan browser.`
-              });
-            }
-          }
-        };
+      const config = { fps: 10, qrbox: { width: 220, height: 220 } };
 
-        startScanner();
-      }, 150);
-    } else if (mode === 'hadir' && !Html5Qrcode) {
-      setMessage({ type: 'error', text: 'Pustaka pemindai kamera tidak termuat dengan benar.' });
-    }
+      // Multi-tier robust camera start routine
+      let started = false;
 
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        scannerRef.current.stop().catch((err: any) => console.error(err));
+      // Tier 1: Prefer rear/environment camera (phones)
+      try {
+        await html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback, () => {});
+        started = true;
+      } catch (t1Err: any) {
+        console.warn("Tier 1 (environment) failed:", t1Err);
       }
+
+      // Tier 2: Prefer front/user camera (laptops / tablets)
+      if (!started) {
+        try {
+          await html5QrCode.start({ facingMode: "user" }, config, qrCodeSuccessCallback, () => {});
+          started = true;
+        } catch (t2Err: any) {
+          console.warn("Tier 2 (user) failed:", t2Err);
+        }
+      }
+
+      // Tier 3: Unconstrained (Any camera device)
+      if (!started) {
+        try {
+          await html5QrCode.start({}, config, qrCodeSuccessCallback, () => {});
+          started = true;
+        } catch (t3Err: any) {
+          console.warn("Tier 3 ({}) failed:", t3Err);
+        }
+      }
+
+      // Tier 4: Explicit device ID from getCameras()
+      if (!started && Html5QrcodeClass.getCameras) {
+        try {
+          const cameras = await Html5QrcodeClass.getCameras();
+          if (cameras && cameras.length > 0) {
+            await html5QrCode.start(cameras[0].id, config, qrCodeSuccessCallback, () => {});
+            started = true;
+          }
+        } catch (t4Err: any) {
+          console.warn("Tier 4 (getCameras) failed:", t4Err);
+        }
+      }
+
+      if (started) {
+        setCameraActive(true);
+        setMessage(null);
+      } else {
+        throw new Error("Tidak dapat menyalakan kamera. Pastikan browser diizinkan mengakses kamera.");
+      }
+    } catch (err: any) {
+      console.error("Camera activation error:", err);
+      setCameraActive(false);
+      const errName = err.name || '';
+      const errMsg = err.message || String(err);
+
+      if (errName === 'NotAllowedError' || errMsg.includes('Permission denied') || errMsg.includes('NotAllowedError')) {
+        setMessage({
+          type: 'error',
+          text: 'Akses kamera ditolak oleh browser. Silakan izinkan akses kamera pada pengaturan browser/HP Anda lalu tekan tombol "Aktifkan Kamera".'
+        });
+      } else if (errName === 'NotFoundError' || errMsg.includes('Requested device not found')) {
+        setMessage({
+          type: 'error',
+          text: 'Perangkat kamera tidak ditemukan pada HP/Laptop Anda.'
+        });
+      } else {
+        setMessage({
+          type: 'error',
+          text: `Gagal membuka kamera (${errName || 'Error'}): ${errMsg}`
+        });
+      }
+    } finally {
+      setStartingCamera(false);
+    }
+  };
+
+  // Auto-start camera when entering 'hadir' mode
+  useEffect(() => {
+    let timer: any = null;
+    if (mode === 'hadir') {
+      timer = setTimeout(() => {
+        initAndStartScanner();
+      }, 200);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
     };
   }, [mode]);
 
@@ -162,7 +243,6 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
     setMessage(null);
 
     try {
-      // 1. Upload file to Supabase Storage
       const fileExt = file.name.split('.').pop();
       const fileName = `${userId}-${Date.now()}.${fileExt}`;
       const filePath = `proofs/${fileName}`;
@@ -178,12 +258,10 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
         throw new Error(`Gagal mengunggah bukti: ${uploadError.message}`);
       }
 
-      // 2. Get Public URL
       const { data: { publicUrl } } = supabase.storage
         .from('attendance_proofs')
         .getPublicUrl(filePath);
 
-      // 3. Submit to API
       const statusType = mode === 'sakit' ? 'sakit' : 'izin';
       const response = await fetch('/api/excuse', {
         method: 'POST',
@@ -234,7 +312,6 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
             </div>
 
             {todayAttendance ? (
-              // Beautiful status card showing they have already checked in
               <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm text-center space-y-6">
                 <div className="mx-auto w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100">
                   <CheckCircle className="w-8 h-8 text-emerald-600" />
@@ -254,7 +331,6 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
                     Waktu presensi: {new Date(todayAttendance.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
                   </p>
                   
-                  {/* If permit Sakit/Izin show approval status */}
                   {(todayAttendance.status === 'sakit' || todayAttendance.status === 'izin') && (
                     <div className="mt-4 p-3.5 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col items-center gap-1">
                       <span className="text-[9px] uppercase font-extrabold text-slate-400 tracking-wider">Status Validasi Sekretaris:</span>
@@ -279,7 +355,6 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
                 </div>
               </div>
             ) : (
-              // Antigravity floating action cards
               <div className="grid grid-cols-1 gap-5">
                 {/* HADIR CARD */}
                 <motion.button
@@ -337,7 +412,7 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex flex-col flex-grow bg-white border border-slate-200 p-6 rounded-3xl shadow-sm text-center justify-between min-h-[400px]"
+            className="flex flex-col flex-grow bg-white border border-slate-200 p-6 rounded-3xl shadow-sm text-center justify-between min-h-[420px]"
           >
             <div className="flex justify-between items-center pb-4 border-b border-slate-100">
               <button 
@@ -348,31 +423,58 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
                 Kembali
               </button>
               <h3 className="text-xs font-black uppercase text-emerald-800 tracking-wider">Scan QR Presensi</h3>
-              <div className="w-16"></div> {/* Spacer */}
+              <div className="w-16"></div>
             </div>
 
             <div className="my-4 space-y-4 flex flex-col items-center justify-center flex-grow">
-              {/* 
-                IMPORTANT: Do NOT add overflow-hidden or border-radius directly to the #reader div.
-                Safari/iOS WebKit clips hardware-composited video elements causing blank camera feed.
-                Use a wrapper div instead for visual styling.
-              */}
-              <div className="w-full rounded-3xl border border-slate-200 shadow-inner overflow-hidden" style={{ borderRadius: '1.5rem' }}>
-                <div id="reader" className="w-full" style={{ minHeight: '280px' }}></div>
-              </div>
-              
-              <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-700">Arahkan Kamera ke QR Code</p>
-                <p className="text-[10px] text-slate-400 font-medium">Pastikan QR Code sekretaris terlihat jelas di dalam bingkai</p>
+              {/* QR Reader Box */}
+              <div className="w-full max-w-sm rounded-3xl border border-slate-200 shadow-inner bg-slate-50 relative min-h-[280px] flex flex-col items-center justify-center overflow-hidden">
+                <div id="reader" className="w-full h-full min-h-[280px]"></div>
+                
+                {/* Trigger Button if Camera is Not Active Yet or Permission User Gesture Required */}
+                {!cameraActive && (
+                  <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs flex flex-col items-center justify-center p-4 gap-3 z-10">
+                    {startingCamera ? (
+                      <div className="flex flex-col items-center gap-2 text-white">
+                        <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+                        <span className="text-xs font-bold">Menghubungkan Kamera...</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={initAndStartScanner}
+                        className="px-5 py-3 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs rounded-2xl shadow-lg flex items-center gap-2 transition-all border border-emerald-400/40"
+                      >
+                        <Camera className="w-4 h-4" />
+                        Aktifkan Kamera Now
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Informative tips box for permissions */}
-              <div className="bg-amber-50/70 border border-amber-200/60 rounded-2xl p-4 text-[10px] text-amber-800 text-left font-semibold space-y-1.5 max-w-sm w-full mt-2 shadow-inner">
-                <p className="font-black text-amber-900 flex items-center gap-1">💡 Kamera Tidak Aktif?</p>
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-700">Arahkan Kamera ke QR Code</p>
+                <p className="text-[10px] text-slate-400 font-medium">Pastikan QR Code terlihat jelas & berada di dalam bingkai scanner</p>
+              </div>
+
+              {/* Retry / Re-trigger Button below */}
+              {(!cameraActive && !startingCamera) && (
+                <button
+                  onClick={initAndStartScanner}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Coba Ulang / Aktifkan Kamera
+                </button>
+              )}
+
+              {/* Troubleshooting Tips */}
+              <div className="bg-amber-50/80 border border-amber-200/70 rounded-2xl p-4 text-[10px] text-amber-900 text-left font-semibold space-y-1.5 max-w-sm w-full mt-2 shadow-xs">
+                <p className="font-black text-amber-950 flex items-center gap-1">💡 Petunjuk Perizinan Kamera:</p>
                 <ul className="list-disc pl-4 space-y-1">
-                  <li><strong>iPhone / iOS (Safari):</strong> Buka Pengaturan HP &gt; Safari &gt; Kamera &gt; ubah menjadi <strong>Izinkan (Allow)</strong>.</li>
-                  <li><strong>Android (Chrome):</strong> Klik ikon gembok di sebelah alamat web di atas &gt; Izin Situs &gt; aktifkan <strong>Kamera</strong>.</li>
-                  <li>Segarkan (refresh) halaman setelah mengaktifkan izin agar kamera mendeteksi perubahan.</li>
+                  <li><strong>iPhone / iOS (Safari):</strong> Buka Pengaturan HP &gt; Safari &gt; Kamera &gt; Ubah jadi <strong>Izinkan</strong>.</li>
+                  <li><strong>Android (Chrome):</strong> Klik ikon 🔒 (gembok) di samping alamat URL web di atas &gt; Izin Situs &gt; Aktifkan <strong>Kamera</strong>.</li>
+                  <li>Jika popup izin muncul, pastikan tekan <strong>Allow (Izinkan)</strong>.</li>
                 </ul>
               </div>
             </div>
@@ -380,14 +482,14 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
             {loading && (
               <div className="flex items-center justify-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 py-3 rounded-2xl animate-pulse">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Sedang memproses presensi Anda...
+                Memverifikasi QR Code presensi...
               </div>
             )}
             
             {message && message.type === 'error' && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-[10px] font-bold rounded-xl flex items-center gap-1.5 mt-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
-                {message.text}
+              <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-bold rounded-2xl flex items-start gap-2 text-left mt-2 shadow-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                <span>{message.text}</span>
               </div>
             )}
           </motion.div>
