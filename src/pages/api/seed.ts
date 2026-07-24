@@ -15,7 +15,7 @@ const USERS = [
   { nim: '2302010104', name: 'SRI INTAN TIARAYANI', prodi: 'Manajemen', division: 'Acara', role: 'member' },
   { nim: '2301020120', name: 'VIA NUROKTAVIANI', prodi: 'Pendidikan Guru Sekolah Dasar', division: 'Konsumsi', role: 'member' },
   { nim: '2303010012', name: 'LINDA MARDIANA', prodi: 'Teknik Informatika', division: 'Pdd', role: 'member' },
-  { nim: '2302010199', name: 'SITI KHODIJA', prodi: 'Manajemen', division: 'Sekretaris', role: 'admin' }, // Sekretaris
+  { nim: '2302010199', name: 'SITI KHODIJAH', prodi: 'Manajemen', division: 'Sekretaris', role: 'admin' }, // Sekretaris
   { nim: '2302010246', name: 'HASBY FAISAL SIDIQ', prodi: 'Manajemen', division: 'Sekretaris', role: 'admin' } // Sekretaris
 ];
 
