@@ -2,7 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { Camera, FileText, Frown, CheckCircle, ArrowLeft, Upload, AlertCircle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Html5Qrcode } from 'html5-qrcode';
+import * as Html5QrcodeModule from 'html5-qrcode';
+
+// Resolve CommonJS named export safely for Vite/Astro production bundles
+const Html5Qrcode = Html5QrcodeModule.Html5Qrcode;
 
 interface Props {
   userId: string;
@@ -42,7 +45,7 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
     let html5QrCode: any = null;
     let timeoutId: any = null;
 
-    if (mode === 'hadir') {
+    if (mode === 'hadir' && Html5Qrcode) {
       // Delay camera initialization by 150ms to ensure React finishes DOM painting
       timeoutId = setTimeout(() => {
         const element = document.getElementById("reader");
@@ -51,8 +54,14 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
           return;
         }
 
-        html5QrCode = new Html5Qrcode("reader");
-        scannerRef.current = html5QrCode;
+        try {
+          html5QrCode = new Html5Qrcode("reader");
+          scannerRef.current = html5QrCode;
+        } catch (e: any) {
+          console.error("Failed to instantiate Html5Qrcode:", e);
+          setMessage({ type: 'error', text: `Inisialisasi pemindai gagal: ${e.message || e}` });
+          return;
+        }
 
         const qrCodeSuccessCallback = async (decodedText: string) => {
           // Stop scanner once scanned successfully
@@ -130,6 +139,8 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
 
         startScanner();
       }, 150);
+    } else if (mode === 'hadir' && !Html5Qrcode) {
+      setMessage({ type: 'error', text: 'Pustaka pemindai kamera tidak termuat dengan benar.' });
     }
 
     return () => {
