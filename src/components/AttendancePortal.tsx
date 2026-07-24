@@ -352,7 +352,14 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
             </div>
 
             <div className="my-4 space-y-4 flex flex-col items-center justify-center flex-grow">
-              <div id="reader" className="w-full aspect-square bg-slate-100 rounded-3xl overflow-hidden border border-slate-200 shadow-inner"></div>
+              {/* 
+                IMPORTANT: Do NOT add overflow-hidden or border-radius directly to the #reader div.
+                Safari/iOS WebKit clips hardware-composited video elements causing blank camera feed.
+                Use a wrapper div instead for visual styling.
+              */}
+              <div className="w-full rounded-3xl border border-slate-200 shadow-inner overflow-hidden" style={{ borderRadius: '1.5rem' }}>
+                <div id="reader" className="w-full" style={{ minHeight: '280px' }}></div>
+              </div>
               
               <div className="space-y-1">
                 <p className="text-xs font-bold text-slate-700">Arahkan Kamera ke QR Code</p>
