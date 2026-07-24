@@ -1,0 +1,117 @@
+---
+import Layout from '../layouts/Layout.astro';
+import AdminPortal from '../components/AdminPortal';
+import { getSupabaseServer, getUserProfile } from '../lib/auth';
+
+const client = getSupabaseServer(Astro.cookies);
+const profile = await getUserProfile(client);
+
+// Auth check
+if (!profile) {
+  return Astro.redirect('/login');
+}
+
+if (profile.role !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+// Fetch active session
+const { data: activeSessions } = await client
+  .from('sessions')
+  .select('*')
+  .eq('is_active', true)
+  .order('created_at', { ascending: false })
+  .limit(1);
+
+const session = activeSessions && activeSessions.length > 0 ? activeSessions[0] : null;
+
+// Fetch pending approvals
+const { data: pendings } = await client
+  .from('attendances')
+  .select(`
+    id,
+    status,
+    reason,
+    proof_url,
+    approval_status,
+    created_at,
+    profiles (
+      full_name,
+      nim,
+      prodi,
+      division
+    )
+  `)
+  .eq('approval_status', 'pending')
+  .order('created_at', { ascending: false });
+
+const safePendings = (pendings || []).map((item: any) => ({
+  ...item,
+  profiles: item.profiles || { full_name: 'Tanpa Nama', nim: 'Tanpa NIM', prodi: 'Tanpa Prodi', division: 'Tanpa Divisi' }
+}));
+
+// Fetch all attendances for Excel-like Recap
+const { data: recap } = await client
+  .from('attendances')
+  .select(`
+    id,
+    status,
+    approval_status,
+    created_at,
+    profiles (
+      full_name,
+      nim,
+      prodi,
+      division
+    ),
+    sessions (
+      date
+    )
+  `)
+  .order('created_at', { ascending: false });
+
+const safeRecap = (recap || []).map((item: any) => ({
+  id: item.id,
+  status: item.status,
+  approval_status: item.approval_status,
+  created_at: item.created_at,
+  full_name: item.profiles?.full_name || 'Tanpa Nama',
+  nim: item.profiles?.nim || 'Tanpa NIM',
+  prodi: item.profiles?.prodi || 'Tanpa Prodi',
+  division: item.profiles?.division || 'Tanpa Divisi',
+  date: item.sessions?.date || '-'
+}));
+
+// Handle API Polling request
+if (Astro.url.searchParams.get('json') === 'true') {
+  return new Response(JSON.stringify({
+    session,
+    pendings: safePendings,
+    recap: safeRecap
+  }), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+---
+
+<Layout title="Dashboard Sekretaris" role={profile.role} userName={profile.full_name} division={profile.division}>
+  <div class="space-y-6">
+    <!-- Welcome Header Card -->
+    <div class="bg-gradient-to-tr from-emerald-950 to-emerald-800 text-white rounded-3xl p-6 shadow-md relative overflow-hidden border border-emerald-500/20">
+      <div class="absolute -right-10 -bottom-10 w-36 h-36 bg-emerald-500/10 rounded-full blur-xl"></div>
+      <div class="relative z-10 space-y-2">
+        <p class="text-xs font-semibold uppercase tracking-wider text-emerald-200">Panel Sekretaris KKN,</p>
+        <h2 class="text-xl font-extrabold tracking-tight">{profile.full_name}</h2>
+        <div class="pt-2 border-t border-white/10 flex justify-between items-center text-xs">
+          <p class="font-medium text-emerald-100">NIM: <span class="font-bold text-emerald-300">{profile.nim}</span></p>
+          <p class="font-medium text-emerald-100">
+            {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Portal Interface (React) -->
+    <AdminPortal client:load initialSession={session} initialPendings={safePendings} initialRecap={safeRecap} adminNim={profile.nim} />
+  </div>
+</Layout>

@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+/* Fix html5-qrcode camera video to fit container perfectly */
+#reader {
+  position: relative !important;
+  border: none !important;
+}
+
+#reader video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 1.5rem !important; /* matches rounded-3xl */
+}
+
+/* Hide any html5-qrcode generated standard titles or help texts inside the container */
+#reader > div:first-child {
+  display: none !important;
+}

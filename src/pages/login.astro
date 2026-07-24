@@ -1,0 +1,83 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { getSupabaseServer, getUserProfile } from '../lib/auth';
+
+const client = getSupabaseServer(Astro.cookies);
+const profile = await getUserProfile(client);
+
+if (profile) {
+  return Astro.redirect(profile.role === 'admin' ? '/admin' : '/dashboard');
+}
+
+const errorMsg = Astro.url.searchParams.get('error');
+const registered = Astro.url.searchParams.get('registered') === 'true';
+---
+
+<Layout title="Login">
+  <div class="flex-grow flex flex-col justify-center py-6">
+    <div class="bg-white/85 backdrop-blur-md p-8 rounded-3xl shadow-xl border border-slate-200/50 hover:shadow-2xl transition-all duration-300">
+      <div class="text-center mb-8">
+        <div class="mb-4">
+          <img src="/logo.webp" alt="Logo KKN Puspamukti" class="w-20 h-20 mx-auto rounded-3xl object-cover shadow-md border border-slate-150" />
+        </div>
+        <h2 class="text-2xl font-black text-slate-800 tracking-tight">Presensi KKN</h2>
+        <p class="text-xs text-slate-500 mt-1 font-medium">KKN Kelompok Puspamukti</p>
+      </div>
+
+      {errorMsg && (
+        <div class="mb-5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          {errorMsg}
+        </div>
+      )}
+
+      {registered && (
+        <div class="mb-5 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Registrasi berhasil! Silakan login.
+        </div>
+      )}
+
+      <form action="/api/login" method="POST" class="space-y-4">
+        <div>
+          <label for="nim" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">NIM (Nomor Induk Mahasiswa)</label>
+          <input
+            type="text"
+            name="nim"
+            id="nim"
+            required
+            placeholder="Contoh: 2302010199"
+            class="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none text-sm transition-all bg-slate-50 font-medium"
+          />
+        </div>
+
+        <div>
+          <label for="password" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Password</label>
+          <input
+            type="password"
+            name="password"
+            id="password"
+            required
+            placeholder="••••••••"
+            class="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none text-sm transition-all bg-slate-50 font-medium"
+          />
+        </div>
+
+        <button
+          type="submit"
+          class="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white rounded-2xl text-sm font-bold shadow-md hover:shadow-lg hover:shadow-emerald-900/10 hover:-translate-y-0.5 active:translate-y-0 active:scale-98 transition-all"
+        >
+          Masuk
+        </button>
+      </form>
+
+      <div class="mt-6 text-center text-[10px] text-slate-400 font-medium">
+        <p>Hubungi Tim IT (Fahri Muhamad Firdaus) jika Anda lupa password Anda.</p>
+      </div>
+    </div>
+  </div>
+</Layout>

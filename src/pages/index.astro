@@ -1,0 +1,12 @@
+---
+import { getSupabaseServer, getUserProfile } from '../lib/auth';
+
+const client = getSupabaseServer(Astro.cookies);
+const profile = await getUserProfile(client);
+
+if (!profile) {
+  return Astro.redirect('/login');
+}
+
+return Astro.redirect(profile.role === 'admin' ? '/admin' : '/dashboard');
+---
