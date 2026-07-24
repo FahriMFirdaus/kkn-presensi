@@ -37,7 +37,7 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
     }
   }, [mode]);
 
-  // QR Code Scanner initialization (using static Html5Qrcode import directly)
+  // QR Code Scanner initialization
   useEffect(() => {
     let html5QrCode: any = null;
     let timeoutId: any = null;
@@ -93,37 +93,21 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
 
         const config = { fps: 10, qrbox: { width: 250, height: 250 } };
         
-        // Smart camera selection: default to back camera, fallback to first available
-        Html5Qrcode.getCameras().then((devices: any[]) => {
-          if (devices && devices.length > 0) {
-            const backCamera = devices.find((device: any) => 
-              device.label.toLowerCase().includes('back') || 
-              device.label.toLowerCase().includes('rear') || 
-              device.label.toLowerCase().includes('environment')
-            );
-            const cameraId = backCamera ? backCamera.id : devices[0].id;
-            
-            html5QrCode.start(cameraId, config, qrCodeSuccessCallback, () => {})
-              .catch((err: any) => {
-                console.error("Camera start error:", err);
-                // Fallback to default start
-                html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback, () => {});
-              });
-          } else {
-            html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback, () => {})
-              .catch((err: any) => {
-                console.error("Camera access error:", err);
-                setMessage({ type: 'error', text: 'Gagal mengakses kamera. Pastikan izin kamera diberikan.' });
-              });
-          }
-        }).catch((err: any) => {
-          console.error("Error getting cameras:", err);
-          // Fallback
-          html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback, () => {})
-            .catch((err: any) => {
-              console.error("Camera access error:", err);
-              setMessage({ type: 'error', text: 'Gagal mengakses kamera. Pastikan izin kamera diberikan.' });
-            });
+        // Start camera directly using facingMode to trigger browser permission prompt instantly (best for iOS/Safari)
+        html5QrCode.start(
+          { facingMode: "environment" }, 
+          config, 
+          qrCodeSuccessCallback, 
+          () => {} // silent scan errors
+        )
+        .catch((err: any) => {
+          console.error("Camera access failed on primary call, trying fallback...", err);
+          
+          // Fallback check on permission error
+          setMessage({
+            type: 'error',
+            text: 'Gagal mengakses kamera. Pastikan Anda mengizinkan akses kamera saat diminta oleh browser Anda.'
+          });
         });
       }, 150);
     }
@@ -340,12 +324,22 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
               <div className="w-16"></div> {/* Spacer */}
             </div>
 
-            <div className="my-6 space-y-4 flex flex-col items-center justify-center flex-grow">
+            <div className="my-4 space-y-4 flex flex-col items-center justify-center flex-grow">
               <div id="reader" className="w-full aspect-square bg-slate-100 rounded-3xl overflow-hidden border border-slate-200 shadow-inner"></div>
               
               <div className="space-y-1">
                 <p className="text-xs font-bold text-slate-700">Arahkan Kamera ke QR Code</p>
-                <p className="text-[10px] text-slate-400 font-medium">Pastikan QR Code sekretaris terlihat jelas dan di dalam bingkai</p>
+                <p className="text-[10px] text-slate-400 font-medium">Pastikan QR Code sekretaris terlihat jelas di dalam bingkai</p>
+              </div>
+
+              {/* Informative tips box for permissions */}
+              <div className="bg-amber-50/70 border border-amber-200/60 rounded-2xl p-4 text-[10px] text-amber-800 text-left font-semibold space-y-1.5 max-w-sm w-full mt-2 shadow-inner">
+                <p className="font-black text-amber-900 flex items-center gap-1">💡 Kamera Tidak Aktif?</p>
+                <ul className="list-disc pl-4 space-y-1">
+                  <li><strong>iPhone / iOS (Safari):</strong> Buka Pengaturan HP &gt; Safari &gt; Kamera &gt; ubah menjadi <strong>Izinkan (Allow)</strong>.</li>
+                  <li><strong>Android (Chrome):</strong> Klik ikon gembok di sebelah alamat web di atas &gt; Izin Situs &gt; aktifkan <strong>Kamera</strong>.</li>
+                  <li>Segarkan (refresh) halaman setelah mengaktifkan izin agar kamera mendeteksi perubahan.</li>
+                </ul>
               </div>
             </div>
 
@@ -353,6 +347,13 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
               <div className="flex items-center justify-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 py-3 rounded-2xl animate-pulse">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Sedang memproses presensi Anda...
+              </div>
+            )}
+            
+            {message && message.type === 'error' && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-[10px] font-bold rounded-xl flex items-center gap-1.5 mt-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                {message.text}
               </div>
             )}
           </motion.div>
