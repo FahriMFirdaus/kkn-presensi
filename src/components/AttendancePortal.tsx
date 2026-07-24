@@ -102,36 +102,32 @@ export default function AttendancePortal({ userId, initialTodayAttendance }: Pro
 
         const config = { fps: 10, qrbox: { width: 250, height: 250 } };
         
-        // Multi-tier robust camera initialization
+        // Highly simplified and robust camera start routine
         const startScanner = async () => {
           try {
-            // Step 1: Attempt to list devices (works if permission is already granted)
-            const devices = await Html5Qrcode.getCameras().catch(() => []);
-            
-            if (devices && devices.length > 0) {
-              // Try to find the back camera
-              const backCamera = devices.find((device: any) => 
-                device.label.toLowerCase().includes('back') || 
-                device.label.toLowerCase().includes('rear') || 
-                device.label.toLowerCase().includes('environment')
-              );
-              
-              const cameraId = backCamera ? backCamera.id : devices[0].id;
-              await html5QrCode.start(cameraId, config, qrCodeSuccessCallback, () => {});
-            } else {
-              // Step 2: iOS Safari fallback trigger (request camera permission dynamically via constraint)
-              await html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback, () => {});
-            }
+            // Start scanning immediately with rear camera preference (environment)
+            // This natively triggers permission popups reliably on all browsers (including Safari and Chrome)
+            await html5QrCode.start(
+              { facingMode: "environment" }, 
+              config, 
+              qrCodeSuccessCallback, 
+              () => {} // silent scan errors
+            );
           } catch (err: any) {
-            console.error("Primary camera setup failed, trying user camera fallback...", err);
+            console.warn("Failed starting camera with environment constraint, trying user camera...", err);
             try {
-              // Step 3: Front camera fallback
-              await html5QrCode.start({ facingMode: "user" }, config, qrCodeSuccessCallback, () => {});
+              // Fallback to front camera (user) if back camera setup fails
+              await html5QrCode.start(
+                { facingMode: "user" }, 
+                config, 
+                qrCodeSuccessCallback, 
+                () => {}
+              );
             } catch (fallbackErr: any) {
-              console.error("All camera load attempts failed:", fallbackErr);
+              console.error("All camera start attempts failed:", fallbackErr);
               setMessage({
                 type: 'error',
-                text: `Kamera tidak dapat dimuat: ${fallbackErr.message || fallbackErr}. Pastikan browser memiliki izin akses kamera.`
+                text: `Kamera tidak dapat dimuat: ${fallbackErr.message || fallbackErr}. Silakan periksa perizinan browser.`
               });
             }
           }
